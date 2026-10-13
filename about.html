@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>About · DoorServe</title>
+  <meta name="description" content="Find trusted local electricians, plumbers, mechanics and more. Starting in Kashmir.">
+  <meta name="theme-color" content="#0E6B73">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" type="image/png" href="favicon.png">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="DoorServe">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <script>
+    /* Theme before first paint + keep the "install app" prompt for the Install button. */
+    (function () {
+      try {
+        var t = localStorage.getItem("ds-theme");
+        if (!t) t = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+        document.documentElement.setAttribute("data-theme", t);
+      } catch (e) { /* keep default */ }
+      window.addEventListener("beforeinstallprompt", function (e) { e.preventDefault(); window.__bip = e; });
+    })();
+  </script>
+</head>
+<body data-page="about">
+  <main id="main" class="page" tabindex="-1"><p class="empty">Loading…</p></main>
+  <noscript><p class="empty">DoorServe needs JavaScript turned on.</p></noscript>
+  <script type="module" src="app.js"></script>
+</body>
+</html>
