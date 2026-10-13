@@ -28,7 +28,7 @@ const firebaseConfig = {
   measurementId: "G-P6TTX13G2H"
 };
 // Shown on the Contact page. Leave "" to hide a line.
-const CONTACT = { cutefeeels1@gmail.com: "", phone: "", whatsapp: "" };
+const CONTACT = { "cutefeeels1@gmail.com" : "", phone: "", whatsapp: "" };
 const AREAS = ["Srinagar", "Anantnag", "Baramulla", "Budgam", "Pulwama", "Kupwara", "Ganderbal", "Bandipora", "Shopian", "Kulgam"];
 const SERVICES = ["Electrician", "Plumber", "Mechanic", "Carpenter", "Appliance repair", "Painter", "Other"];
 const PREF_TIMES = ["Today", "Tomorrow", "This week", "Any time"];
