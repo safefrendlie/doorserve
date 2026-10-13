@@ -16,7 +16,6 @@ import {
   query, where, orderBy, limit, onSnapshot, serverTimestamp, arrayRemove, writeBatch,
   getCountFromServer
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-
 /* ---------- 1. SETTINGS YOU CAN EDIT ---------- */
 const firebaseConfig = {
   apiKey: "AIzaSyDniLgUhpYIj9Qy-Hgt-FHLGSyjvl_9zwI",
@@ -28,7 +27,7 @@ const firebaseConfig = {
   measurementId: "G-P6TTX13G2H"
 };
 // Shown on the Contact page. Leave "" to hide a line.
-const CONTACT = { email: "cutefeeels1@gmail.com", phone: "", whatsapp: "" };
+const CONTACT = { email:"cutefeeels1@gmail.com", phone: "", whatsapp: "" };
 const AREAS = ["Srinagar", "Anantnag", "Baramulla", "Budgam", "Pulwama", "Kupwara", "Ganderbal", "Bandipora", "Shopian", "Kulgam"];
 const SERVICES = ["Electrician", "Plumber", "Mechanic", "Carpenter", "Appliance repair", "Painter", "Other"];
 const PREF_TIMES = ["Today", "Tomorrow", "This week", "Any time"];
