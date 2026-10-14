@@ -170,10 +170,39 @@ function goNext() {
 }
 
 /* ---------- 4. NOTIFICATIONS (while the app is open) ---------- */
-function notify(title, body, hash) {
+let audioCtx = null;
+function unlockAudio() {
+  try {
+    audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === "suspended") audioCtx.resume();
+  } catch (e) { /* ignore */ }
+}
+["click", "touchstart", "keydown"].forEach((ev) => document.addEventListener(ev, unlockAudio, { passive: true }));
+function playTone(kind) {
+  try {
+    if (!audioCtx || audioCtx.state !== "running") return;
+    const notes = kind === "request" ? [659, 784, 988, 1175, 988, 1175, 1319] : [880, 1175];
+    const gap = kind === "request" ? 0.16 : 0.14;
+    notes.forEach((freq, i) => {
+      const t = audioCtx.currentTime + i * gap;
+      const o = audioCtx.createOscillator();
+      const g = audioCtx.createGain();
+      o.type = "sine";
+      o.frequency.value = freq;
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(0.35, t + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + gap + 0.12);
+      o.connect(g); g.connect(audioCtx.destination);
+      o.start(t); o.stop(t + gap + 0.15);
+    });
+  } catch (e) { /* ignore */ }
+}
+function notify(title, body, hash, kind) {
+  playTone(kind || "message");
   if (document.hidden && "Notification" in window && Notification.permission === "granted" && navigator.serviceWorker) {
     navigator.serviceWorker.ready
-      .then((r) => r.showNotification(title, { body, icon: "icon-192.png", badge: "icon-192.png", data: { url: "./" + hash } }))
+      .then((r) => r.showNotification(title, { body, icon: "icon-192.png", badge: "icon-192.png", tag: hash, renotify: true,
+        vibrate: [200, 100, 200, 100, 300], data: { url: "./" + hash } }))
       .catch(() => {});
   } else toast(title + ": " + body);
 }
@@ -202,7 +231,7 @@ function startGlobal() {
   globalUnsubs.push(onSnapshot(q2, (snap) => {
     if (!first2 && profile.notifyRequests !== false) {
       snap.docChanges().forEach((ch) => {
-        if (ch.type === "added") notify("New service request", ch.doc.data().service + " in " + ch.doc.data().area, "my.html");
+        if (ch.type === "added") notify("New service request", ch.doc.data().service + " in " + ch.doc.data().area, "my.html", "request");
       });
     }
     first2 = false;
@@ -489,6 +518,7 @@ VIEWS.request = async (c) => {
 
 VIEWS.join = async (c) => {
   const adminMode = c.q.get("admin") === "1" && isAdmin;
+  if (!adminMode && needLogin(c)) return;
   const f = {
     name: h("input", { type: "text", maxlength: 80, required: true }),
     cat: select(SERVICES, "", "Choose service"), area: select(AREAS, "", "Choose area"),
@@ -500,7 +530,7 @@ VIEWS.join = async (c) => {
     photos: h("textarea", { placeholder: "Links to work photos, one per line (optional, up to 4)" })
   };
   const err = h("p", { class: "err", hidden: true });
-  const btn = h("button", { class: "btn btn-primary btn-block", type: "submit" }, adminMode ? "Add provider" : "Send application");
+  const btn = h("button", { class: "btn btn-primary btn-block", type: "submit" }, adminMode ? "Add provider" : "Create my profile");
   const form = h("form", { class: "card" }, lab("Name / business name", f.name), lab("Service", f.cat), lab("Service area", f.area),
     lab("Phone (shown publicly)", f.phone), lab("WhatsApp number", f.wa), lab("Experience (years)", f.exp),
     lab("Working hours", f.hours), lab("About", f.about), lab("Work photo links", f.photos), err, btn);
@@ -520,20 +550,17 @@ VIEWS.join = async (c) => {
     };
     await busy(btn, async () => {
       try {
-        if (adminMode) {
-          await addDoc(collection(db, "providers"), { ...data, ownerUid: "", verified: false, active: true, createdAt: serverTimestamp() });
-          provCache = null; toast("Provider added.", "ok"); location.href = "admin.html";
-        } else {
-          await addDoc(collection(db, "providerApplications"), { ...data, applicantUid: me ? me.uid : "", createdAt: serverTimestamp() });
-          c.root.replaceChildren(h("div", { class: "card stack" }, h("h2", {}, "Thank you!"),
-            h("p", { class: "muted" }, "We received your application. We’ll contact you to verify your details before your profile goes live."),
-            h("a", { class: "btn btn-primary", href: "index.html" }, "Back to home")));
-        }
+        await addDoc(collection(db, "providers"), { ...data, ownerUid: me ? me.uid : "", verified: false, active: true, createdAt: serverTimestamp() });
+        provCache = null;
+        if (adminMode) { toast("Provider added.", "ok"); location.href = "admin.html"; return; }
+        c.root.replaceChildren(h("div", { class: "card stack" }, h("h2", {}, "You’re live!"),
+          h("p", { class: "muted" }, "Your profile is already visible in search. DoorServe will add a Verified badge once we’ve checked your details — that doesn’t stop people from contacting you now."),
+          h("a", { class: "btn btn-primary", href: "find.html?service=" + enc(data.category) }, "See your listing")));
       } catch (e2) { fail(friendly(e2)); }
     });
   });
   c.root.append(h("h1", { class: "page-title" }, adminMode ? "Add a provider" : "Join as a provider"),
-    h("p", { class: "muted" }, adminMode ? "Adds a listing directly (not verified)." : "Free to join. Your phone number is shown on your public profile. Tip: sign in first if you want customers to message you in the app."),
+    h("p", { class: "muted" }, adminMode ? "Adds a listing directly (not verified)." : "Free to join. Your profile goes live immediately, no approval needed. Your phone number is shown publicly. Tip: sign in first if you want customers to message you in the app."),
     form);
 };
 
@@ -768,7 +795,9 @@ VIEWS.chat = async (c) => {
   const send = h("button", { class: "btn btn-primary btn-sm", type: "submit" }, "Send");
   const title = h("h1", { class: "page-title" }, "Chat");
   let other = "";
-  c.root.append(h("p", {}, h("a", { href: "inbox.html" }, "← Messages")), title, box, h("form", { class: "sendbar" }, input, send));
+  let callDone = false;
+  const callSlot = h("div", {});
+  c.root.append(h("p", {}, h("a", { href: "inbox.html" }, "← Messages")), title, callSlot, box, h("form", { class: "sendbar" }, input, send));
   c.root.lastChild.addEventListener("submit", async (e) => {
     e.preventDefault();
     const text = input.value.trim();
@@ -786,12 +815,38 @@ VIEWS.chat = async (c) => {
     const x = s.data();
     other = x.participants.find((p) => p !== me.uid) || "";
     title.textContent = (x.names || {})[other] || "Chat";
+    if (other && !callDone) {
+      callDone = true;
+      getDocs(query(collection(db, "providers"), where("ownerUid", "==", other), limit(1))).then((ps) => {
+        const p = ps.docs[0] ? ps.docs[0].data() : null;
+        if (p && p.phone) callSlot.replaceChildren(h("a", { class: "btn btn-primary btn-sm", href: "tel:+" + intl(p.phone) }, ic("phone"), "Call"));
+      }).catch(() => {});
+    }
     if ((x.unreadFor || []).includes(me.uid)) updateDoc(ref, { unreadFor: arrayRemove(me.uid) }).catch(() => {});
   }, (e) => toast(friendly(e), "error")));
   c.own(onSnapshot(query(collection(db, "conversations", cid, "messages"), orderBy("createdAt", "asc"), limit(200)), (snap) => {
+    const lastId = snap.docs.length ? snap.docs[snap.docs.length - 1].id : "";
+    const syncLast = (t) => updateDoc(ref, { lastText: t.slice(0, 120) }).catch(() => {});
     box.replaceChildren(...snap.docs.map((d) => {
       const m = d.data({ serverTimestamps: "estimate" });
-      return h("div", { class: "bubble" + (m.senderUid === me.uid ? " mine" : "") }, m.text);
+      const mine = m.senderUid === me.uid;
+      const bubble = h("div", { class: "bubble" + (mine ? " mine" : "") }, m.text, m.edited ? h("span", { class: "muted small" }, " (edited)") : null);
+      if (!mine || d.metadata.hasPendingWrites) return bubble;
+      const edit = async () => {
+        const t = window.prompt("Edit message (you can edit only once)", m.text);
+        if (t === null) return;
+        const v = t.trim().slice(0, 1000);
+        if (!v || v === m.text) return;
+        try { await updateDoc(d.ref, { text: v, edited: true }); if (d.id === lastId) syncLast(v); } catch (e2) { toast(friendly(e2), "error"); }
+      };
+      const unsend = async () => {
+        if (!window.confirm("Unsend this message?")) return;
+        try { await deleteDoc(d.ref); if (d.id === lastId) syncLast("Message deleted"); } catch (e2) { toast(friendly(e2), "error"); }
+      };
+      const acts = h("div", { class: "msg-actions" },
+        m.edited ? null : h("button", { class: "msg-act", type: "button", on: { click: edit } }, "Edit"),
+        h("button", { class: "msg-act", type: "button", on: { click: unsend } }, "Unsend"));
+      return h("div", { class: "msgrow mine" }, bubble, acts);
     }));
     box.scrollTop = box.scrollHeight;
   }, (e) => toast(friendly(e), "error")));
@@ -806,30 +861,13 @@ VIEWS.admin = async (c) => {
   const [v, s, ct, rq, done] = await Promise.all([ev("home_view"), ev("search"), ev("contact"), ev("request"),
     count(query(collection(db, "requests"), where("status", "==", "completed")))]);
   const fn = (n, t) => h("div", {}, h("b", {}, String(n)), h("span", {}, t));
-  const apps = h("div", { class: "stack" }), provs = h("div", { class: "stack" }), reqs = h("div", { class: "stack" }), msgs = h("div", { class: "stack" });
+  const provs = h("div", { class: "stack" }), reqs = h("div", { class: "stack" }), msgs = h("div", { class: "stack" });
   const sec = (t, el, open) => h("details", { class: "card", open: open || null }, h("summary", {}, t), h("div", { style: "height:10px" }), el);
   c.root.append(h("h1", { class: "page-title" }, "Admin"),
     h("div", { class: "card stack" }, h("h2", {}, "Funnel"), h("div", { class: "funnel" }, fn(v, "Visitors"), fn(s, "Searches"), fn(ct, "Contacts"), fn(rq, "Requests"), fn(done, "Completed"))),
-    sec("Applications", apps, true), sec("Providers", provs), sec("Requests", reqs, true), sec("Contact messages", msgs));
+    sec("Providers", provs, true), sec("Requests", reqs, true), sec("Contact messages", msgs));
   const err = (e) => toast(friendly(e), "error");
   let providerList = [];
-  c.own(onSnapshot(collection(db, "providerApplications"), (snap) => {
-    apps.replaceChildren(...(snap.empty ? [msg("No new applications.")] : snap.docs.map((d) => {
-      const a = d.data();
-      const approve = async () => {
-        const b = writeBatch(db);
-        b.set(doc(collection(db, "providers")), { name: a.name, category: a.category, area: a.area, phone: a.phone, whatsapp: a.whatsapp,
-          experienceYears: a.experienceYears, hours: a.hours, about: a.about, photos: a.photos || [], ownerUid: a.applicantUid || "",
-          verified: false, active: true, createdAt: serverTimestamp() });
-        b.delete(d.ref);
-        await b.commit(); provCache = null; toast("Approved. Now verify them when you’ve checked.", "ok");
-      };
-      return h("div", { class: "stack" }, h("b", {}, a.name + " · " + a.category + " · " + a.area),
-        h("p", { class: "muted small" }, a.phone + " · " + a.experienceYears + " yrs · " + a.hours), a.about ? h("p", {}, a.about) : null,
-        h("div", { class: "row" }, h("button", { class: "btn btn-primary btn-sm", type: "button", on: { click: () => approve().catch(err) } }, "Approve"),
-          h("button", { class: "btn btn-ghost btn-sm", type: "button", on: { click: () => deleteDoc(d.ref).catch(err) } }, "Reject")));
-    })));
-  }, err));
   c.own(onSnapshot(collection(db, "providers"), (snap) => {
     providerList = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
     provs.replaceChildren(h("a", { class: "btn btn-ghost btn-sm", href: "join.html?admin=1" }, "Add provider directly"),

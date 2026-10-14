@@ -1,7 +1,7 @@
 /* DoorServe service worker: makes the app installable, keeps a copy of the
    app files for quick/offline start, and shows notifications.
    Network first, so updates you upload to GitHub appear right away. */
-const CACHE = "doorserve-v3";
+const CACHE = "doorserve-v4";
 const FILES = ["./", "index.html", "services.html", "find.html", "provider.html", "request.html", "join.html",
                "safety.html", "about.html", "contact.html", "login.html", "style.css", "app.js", "manifest.webmanifest",
                "icon-192.png", "icon-512.png", "logo.png"];
